@@ -3,7 +3,7 @@
 #
 # furl - URL manipulation made simple.
 #
-# Arthur Grunseid
+# Ansgar Grunseid
 # grunseid.com
 # grunseid@gmail.com
 #
@@ -12,10 +12,7 @@
 
 from orderedmultidict import omdict
 
-
-def _quacks_like_a_list_but_not_str(duck):
-    return (hasattr(duck, '__iter__') and callable(duck.__iter__) and
-            not isinstance(duck, str))
+from .common import is_iterable_but_not_string, absent as _absent
 
 
 class omdict1D(omdict):
@@ -48,14 +45,18 @@ class omdict1D(omdict):
       omd.updateall([(1,[1,11]), (2,[2,22])])
       omd.allitems == [(1,1), (1,11), (2,2), (2,22)]
     """
+
     def add(self, key, value):
-        if not _quacks_like_a_list_but_not_str(value):
+        if not is_iterable_but_not_string(value):
             value = [value]
+
         if value:
             self._map.setdefault(key, list())
+
         for val in value:
             node = self._items.append(key, val)
             self._map[key].append(node)
+
         return self
 
     def set(self, key, value):
@@ -70,12 +71,12 @@ class omdict1D(omdict):
         Subclassed from omdict._bin_update_items() to make update() and
         updateall() process lists of values as multiple values.
 
-        <replacements and <leftovers> are modified directly, ala pass by
+        <replacements> and <leftovers> are modified directly, ala pass by
         reference.
         """
         for key, values in items:
             # <values> is not a list or an empty list.
-            like_list_not_str = _quacks_like_a_list_but_not_str(values)
+            like_list_not_str = is_iterable_but_not_string(values)
             if not like_list_not_str or (like_list_not_str and not values):
                 values = [values]
 
@@ -87,29 +88,25 @@ class omdict1D(omdict):
                 # omdict._update_updateall().
                 if value == []:
                     replacements[key] = []
-                    leftovers[:] = [l for l in leftovers if key != l[0]]
-                    continue
-
+                    leftovers[:] = [lst for lst in leftovers if key != lst[0]]
                 # If there are existing items with key <key> that have
                 # yet to be marked for replacement, mark that item's
                 # value to be replaced by <value> by appending it to
-                # <replacements>.  TODO: Refactor for clarity
-                if (key in self and
-                    (key not in replacements or
-                     (key in replacements and
-                      replacements[key] == []))):
+                # <replacements>.
+                elif (key in self and
+                      replacements.get(key, _absent) in [[], _absent]):
                     replacements[key] = [value]
                 elif (key in self and not replace_at_most_one and
                       len(replacements[key]) < len(self.values(key))):
                     replacements[key].append(value)
+                elif replace_at_most_one:
+                    replacements[key] = [value]
                 else:
-                    if replace_at_most_one:
-                        replacements[key] = [value]
-                    else:
-                        leftovers.append((key, value))
+                    leftovers.append((key, value))
 
     def _set(self, key, value):
-        if not _quacks_like_a_list_but_not_str(value):
+        if not is_iterable_but_not_string(value):
             value = [value]
         self.setlist(key, value)
+
         return self

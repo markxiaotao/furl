@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite errors="0" failures="0" hostname="Marks-MacBook-Pro.local" name="pytest" skipped="0" tests="1" time="0.040" timestamp="2021-11-18T13:54:24.985213"><testcase classname="tests.test_furl.TestFurl" name="test_join_path_segments" time="0.001" /></testsuite></testsuites>

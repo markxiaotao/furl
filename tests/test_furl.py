@@ -3,16 +3,18 @@
 #
 # furl - URL manipulation made simple.
 #
-# Arthur Grunseid
+# Ansgar Grunseid
 # grunseid.com
 # grunseid@gmail.com
 #
 # License: Build Amazing Things (Unlicense)
 #
 
-import sys
+from __future__ import division
+
 import warnings
 from abc import ABCMeta, abstractmethod
+import sys
 
 import six
 from six.moves import zip
@@ -21,14 +23,9 @@ from six.moves.urllib.parse import (
 
 import furl
 from furl.omdict1D import omdict1D
-from furl.compat import OrderedDict as odict
+from furl.compat import string_types, OrderedDict as odict
 
-PYTHON_27PLUS = sys.version_info >= (2, 7)
-
-if PYTHON_27PLUS:
-    import unittest
-else:
-    import unittest2 as unittest
+import unittest
 
 
 #
@@ -104,10 +101,10 @@ class itemstr(str, itemcontainer):
         # values without '=' have value None.
         items = []
         parsed = parse_qsl(self, keep_blank_values=True)
-        pairstrs = [s2 for s1 in self.split('&')
-                    for s2 in s1.split(';')]
+        pairstrs = [
+            s2 for s1 in self.split('&') for s2 in s1.split(';')]
         for (key, value), pairstr in zip(parsed, pairstrs):
-            if key == quote_plus(pairstr):
+            if key == pairstr:
                 value = None
             items.append((key, value))
         return items
@@ -119,6 +116,17 @@ class itemstr(str, itemcontainer):
         return str(self)
 
 
+class TestMetadata(unittest.TestCase):
+    def test_metadata(self):
+        assert furl.__title__
+        assert furl.__version__
+        assert furl.__license__
+        assert furl.__author__
+        assert furl.__contact__
+        assert furl.__url__
+        assert furl.__description__
+
+
 class TestPath(unittest.TestCase):
 
     def test_none(self):
@@ -126,7 +134,7 @@ class TestPath(unittest.TestCase):
         assert str(p) == ''
 
         p = furl.Path('/a/b/c')
-        assert str(p) == '/a/b/c'
+        assert str(p) == '/a/b/c/'
         p.load(None)
         assert str(p) == ''
 
@@ -239,15 +247,17 @@ class TestPath(unittest.TestCase):
 
     def _test_set_load(self, path_set_or_load):
         p = furl.Path('a/b/c/')
+        assert path_set_or_load(p, furl.Path('asdf/asdf/')) == p
+        assert not p.isabsolute and str(p) == 'asdf/asdf/'
+
         assert path_set_or_load(p, 'asdf/asdf/') == p
-        assert not p.isabsolute
-        assert str(p) == 'asdf/asdf/'
+        assert not p.isabsolute and str(p) == 'asdf/asdf/'
+
         assert path_set_or_load(p, ['a', 'b', 'c', '']) == p
-        assert not p.isabsolute
-        assert str(p) == 'a/b/c/'
+        assert not p.isabsolute and str(p) == 'a/b/c/'
+
         assert path_set_or_load(p, ['', 'a', 'b', 'c', '']) == p
-        assert p.isabsolute
-        assert str(p) == '/a/b/c/'
+        assert p.isabsolute and str(p) == '/a/b/c/'
 
     def test_add(self):
         # URL paths.
@@ -518,6 +528,45 @@ class TestPath(unittest.TestCase):
             p = furl.Path(path)
             assert str(p) == path_encoded
 
+    def test_itruediv(self):
+        p = furl.Path()
+
+        p /= 'a'
+        assert str(p) == 'a'
+
+        p /= 'b'
+        assert str(p) == 'a/b'
+
+        p /= 'c d/'
+        assert str(p) == 'a/b/c%20d/'
+
+        p /= furl.Path('e')
+        assert str(p) == 'a/b/c%20d/e'
+
+    def test_truediv(self):
+        p = furl.Path()
+
+        p1 = p / 'a'
+        assert p1 is not p
+        assert str(p1) == 'a'
+
+        p2 = p / 'a' / 'b'
+        assert p2 is not p
+        assert str(p) == ''
+        assert str(p2) == 'a/b'
+
+        # Path objects should be joinable with other Path objects.
+        p3 = furl.Path('e')
+        p4 = furl.Path('f')
+        assert p3 / p4 == furl.Path('e/f')
+
+        # Joining paths with __truediv__ should not modify the original, even
+        # if <isabsolute> is True.
+        p5 = furl.Path(['a', 'b'], force_absolute=lambda _: True)
+        p6 = p5 / 'c'
+        assert str(p5) == '/a/b'
+        assert str(p6) == '/a/b/c'
+
     def test_asdict(self):
         segments = ['wiki', 'ロリポップ']
         path_encoded = 'wiki/%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
@@ -572,17 +621,17 @@ class TestQuery(unittest.TestCase):
             'space=a+a&amp=a%26a', 'a a=a a&no encoding=sup', 'a+a=a+a',
             'a%20=a+a', 'a%20a=a%20a', 'a+a=a%20a', 'space=a a&amp=a^a',
             'a=a&s=s#s', '+=+', "/?:@-._~!$&'()*+,=/?:@-._~!$'()*+,=",
-            'a=a&c=c%5Ec', '<=>&^="', '%3C=%3E&%5E=%22', '%=%;`=`',
+            'a=a&c=c%5Ec', '<=>&^="', '%3C=%3E&%5E=%22', '%=%&`=`',
             '%25=%25&%60=%60',
             # Only keys, no values.
-            'asdfasdf', '/asdf/asdf/sdf', '*******', '!@#(*&@!#(*@!#', 'a&b&',
-            'a;b',
+            'asdfasdf', '/asdf/asdf/sdf', '*******', '!@#(*&@!#(*@!#', 'a&b',
+            'a&b',
             # Repeated parameters.
             'a=a&a=a', 'space=a+a&space=b+b',
             # Empty keys and/or values.
             '=', 'a=', 'a=a&a=', '=a&=b',
-            # Semicolon delimiter, like 'a=a;b=b'.
-            'a=a;a=a', 'space=a+a;space=b+b',
+            # Semicolon delimiter is not allowed per default after bpo#42967
+            'a=a&a=a', 'space=a+a&space=b+b',
         ]))
         self.items = (self.itemlists + self.itemdicts + self.itemomdicts +
                       self.itemstrs)
@@ -718,12 +767,10 @@ class TestQuery(unittest.TestCase):
         q = furl.Query('a=&=b')
         assert q.params == {'a': '', '': 'b'} and str(q) == 'a=&=b'
 
-        # ';' is a valid query delimiter.
+        # ';' is no longer a valid query delimiter, though it was prior to furl
+        # v2.1.3. See https://bugs.python.org/issue42967.
         q = furl.Query('=;=')
-        assert q.params.allitems() == [('', ''), ('', '')] and str(q) == '=&='
-        q = furl.Query('a=a;b=b;c=')
-        assert q.params == {
-            'a': 'a', 'b': 'b', 'c': ''} and str(q) == 'a=a&b=b&c='
+        assert q.params.allitems() == [('', ';=')] and str(q) == '=%3B='
 
         # Non-string parameters are coerced to strings in the final
         # query string.
@@ -804,6 +851,19 @@ class TestQuery(unittest.TestCase):
         assert query.encode(';') == 'a=b+c;d=e+f'
         assert query.encode(';', quote_plus=False) == 'a=b%20c;d=e%20f'
 
+        # Encode '/' consistently across quote_plus=True and quote_plus=False.
+        query = furl.Query('a /b')
+        assert query.encode(quote_plus=True) == 'a+%2Fb'
+        assert query.encode(quote_plus=False) == 'a%20%2Fb'
+
+        # dont_quote= accepts both True and a string of safe characters not to
+        # percent-encode. Unsafe query characters, like '^' and '#', are always
+        # percent-encoded.
+        query = furl.Query('a %2B/b?#')
+        assert query.encode(dont_quote='^') == 'a+%2B%2Fb%3F%23'
+        assert query.encode(quote_plus=True, dont_quote=True) == 'a++/b?%23'
+        assert query.encode(quote_plus=False, dont_quote=True) == 'a%20+/b?%23'
+
     def test_asdict(self):
         pairs = [('a', '1'), ('ロリポップ', 'testä')]
         key_encoded = '%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
@@ -816,14 +876,45 @@ class TestQuery(unittest.TestCase):
             }
         assert p.asdict() == d
 
+    def test_value_encoding_empty_vs_nonempty_key(self):
+        pair = ('=', '=')
+        pair_encoded = '%3D=%3D'
+        assert furl.Query(pair_encoded).params.allitems() == [pair]
+
+        q = furl.Query()
+        q.params = [pair]
+        assert q.encode() == pair_encoded
+
+        empty_key_pair = ('', '==3===')
+        empty_key_encoded = '===3==='
+        assert furl.Query(empty_key_encoded).params.items() == [empty_key_pair]
+
+    def test_special_characters(self):
+        q = furl.Query('==3==')
+        assert q.params.allitems() == [('', '=3==')] and str(q) == '==3=='
+
+        f = furl.furl('https://www.google.com????')
+        assert f.args.allitems() == [('???', None)]
+
+        q = furl.Query('&=&')
+        assert q.params.allitems() == [('', None), ('', ''), ('', None)]
+        assert str(q) == '&=&'
+
+        url = 'https://www.google.com?&&%3F=&%3F'
+        f = furl.furl(url)
+        assert f.args.allitems() == [
+            ('', None), ('', None), ('?', ''), ('?', None)]
+        assert f.url == url
+
     def _quote_items(self, items):
         # Calculate the expected querystring with proper query encoding.
         #   Valid query key characters: "/?:@-._~!$'()*,;"
         #   Valid query value characters: "/?:@-._~!$'()*,;="
         allitems_quoted = []
         for key, value in items.iterallitems():
-            pair = (quote_plus(str(key), "/?:@-._~!$'()*,;"),
-                    quote_plus(str(value), "/?:@-._~!$'()*,;="))
+            pair = (
+                quote_plus(str(key), "/?:@-._~!$'()*,;"),
+                quote_plus(str(value), "/?:@-._~!$'()*,;="))
             allitems_quoted.append(pair)
         return allitems_quoted
 
@@ -844,6 +935,9 @@ class TestQueryCompositionInterface(unittest.TestCase):
         t = tester()
         assert isinstance(t.query, furl.Query)
         assert str(t.query) == ''
+
+        t.args = {'55': '66'}
+        assert t.args == {'55': '66'} and str(t.query) == '55=66'
 
         t.query = 'a=a&s=s s'
         assert isinstance(t.query, furl.Query)
@@ -899,13 +993,13 @@ class TestFragment(unittest.TestCase):
                  ('dog?machine?yes', 'dog%3Fmachine%3Fyes', {}),
                  ('dog?machine=?yes', 'dog', {'machine': '?yes'}),
                  ('schtoot?a=a&hok%20sprm', 'schtoot',
-                  {'a': 'a', 'hok sprm': ''}),
+                  {'a': 'a', 'hok sprm': None}),
                  ('schtoot?a=a&hok sprm', 'schtoot',
-                  {'a': 'a', 'hok sprm': ''}),
+                  {'a': 'a', 'hok sprm': None}),
                  ('sch/toot?a=a&hok sprm', 'sch/toot',
-                  {'a': 'a', 'hok sprm': ''}),
+                  {'a': 'a', 'hok sprm': None}),
                  ('/sch/toot?a=a&hok sprm', '/sch/toot',
-                  {'a': 'a', 'hok sprm': ''}),
+                  {'a': 'a', 'hok sprm': None}),
                  ]
 
         for fragment, path, query in comps:
@@ -1014,10 +1108,8 @@ class TestFragment(unittest.TestCase):
         assert f
 
     def test_asdict(self):
-        segments = ['wiki', 'ロリポップ']
         path_encoded = '/wiki/%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
 
-        pairs = [('a', '1'), ('ロリポップ', 'testä')]
         key_encoded = '%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
         value_encoded = 'test%C3%A4'
         query_encoded = 'a=1&' + key_encoded + '=' + value_encoded
@@ -1092,6 +1184,12 @@ class TestFurl(unittest.TestCase):
         items = parse_qsl(urlsplit(url).query, True)
         return (key, val) in items
 
+    def test_constructor_and_set(self):
+        f = furl.furl(
+            'http://user:pass@pumps.ru/', args={'hi': 'bye'},
+            scheme='scrip', path='prorp', host='horp', fragment='fraggg')
+        assert f.url == 'scrip://user:pass@horp/prorp?hi=bye#fraggg'
+
     def test_none(self):
         f = furl.furl(None)
         assert str(f) == ''
@@ -1117,7 +1215,7 @@ class TestFurl(unittest.TestCase):
         assert f.url == encoded_url
 
         f = furl.furl().set(host=u'ロリポップ')
-        assert f.url == 'xn--9ckxbq5co'
+        assert f.url == '//xn--9ckxbq5co'
 
     def test_unicode(self):
         paths = ['ロリポップ', u'ロリポップ']
@@ -1174,32 +1272,38 @@ class TestFurl(unittest.TestCase):
         # Protocol relative URLs.
         for url in ['//', '//sup.txt', '//arc.io/d/sup']:
             f = furl.furl(url)
-            assert f.scheme == '' and f.url == url
+            assert f.scheme is None and f.url == url
 
         f = furl.furl('//sup.txt')
-        assert f.scheme == ''
-        f.scheme = None
-        assert f.scheme is None and f.url == 'sup.txt'
+        assert f.scheme is None and f.url == '//sup.txt'
         f.scheme = ''
-        assert f.scheme == '' and f.url == '//sup.txt'
+        assert f.scheme == '' and f.url == '://sup.txt'
 
-        # Schemes without slashes , like 'mailto:'.
-        f = furl.furl('mailto:sup@sprp.ru')
-        assert f.url == 'mailto:sup@sprp.ru'
-        f = furl.furl('mailto://sup@sprp.ru')
-        assert f.url == 'mailto:sup@sprp.ru'
+        # Schemes without slashes, like 'mailto:'.
+        assert furl.furl('mailto:sup@sprp.ru').url == 'mailto:sup@sprp.ru'
+        assert furl.furl('mailto://sup@sprp.ru').url == 'mailto://sup@sprp.ru'
 
         f = furl.furl('mailto:sproop:spraps@sprp.ru')
         assert f.scheme == 'mailto'
-        assert f.username == 'sproop' and f.password == 'spraps'
-        assert f.host == 'sprp.ru'
+        assert f.path == 'sproop:spraps@sprp.ru'
 
         f = furl.furl('mailto:')
-        assert f.url == 'mailto:' and f.scheme == 'mailto'
+        assert f.url == 'mailto:' and f.scheme == 'mailto' and f.netloc is None
+
+        f = furl.furl('tel:+1-555-555-1234')
+        assert f.scheme == 'tel' and str(f.path) == '+1-555-555-1234'
+
+        f = furl.furl('urn:srp.com/ferret?query')
+        assert f.scheme == 'urn' and str(f.path) == 'srp.com/ferret'
+        assert str(f.query) == 'query'
 
         # Ignore invalid schemes.
         assert furl.furl('+invalid$scheme://lolsup').scheme is None
         assert furl.furl('/api/test?url=http://a.com').scheme is None
+
+        # Empty scheme.
+        f = furl.furl(':')
+        assert f.scheme == '' and f.netloc is None and f.url == ':'
 
     def test_username_and_password(self):
         # Empty usernames and passwords.
@@ -1297,19 +1401,27 @@ class TestFurl(unittest.TestCase):
         f = furl.furl()
         assert f.username is f.password is None
         f.username = 'uu'
-        assert f.username == 'uu' and f.password is None and f.url == 'uu@'
+        assert f.username == 'uu' and f.password is None and f.url == '//uu@'
         f.password = 'pp'
-        assert f.username == 'uu' and f.password == 'pp' and f.url == 'uu:pp@'
+        assert f.username == 'uu' and f.password == 'pp'
+        assert f.url == '//uu:pp@'
         f.username = ''
-        assert f.username == '' and f.password == 'pp' and f.url == ':pp@'
+        assert f.username == '' and f.password == 'pp' and f.url == '//:pp@'
         f.password = ''
-        assert f.username == f.password == '' and f.url == ':@'
+        assert f.username == f.password == '' and f.url == '//:@'
         f.password = None
-        assert f.username == '' and f.password is None and f.url == '@'
+        assert f.username == '' and f.password is None and f.url == '//@'
         f.username = None
         assert f.username is f.password is None and f.url == ''
         f.password = ''
-        assert f.username is None and f.password == '' and f.url == ':@'
+        assert f.username is None and f.password == '' and f.url == '//:@'
+
+        # Unicode.
+        username = u'kødp'
+        password = u'ålæg'
+        f = furl.furl(u'https://%s:%s@example.com/' % (username, password))
+        assert f.username == username and f.password == password
+        assert f.url == 'https://k%C3%B8dp:%C3%A5l%C3%A6g@example.com/'
 
     def test_basics(self):
         url = 'hTtP://www.pumps.com/'
@@ -1375,10 +1487,21 @@ class TestFurl(unittest.TestCase):
         # with '//', as-is the default behavior of
         # urlparse.urlunsplit().
         f = furl.furl()
-        assert f.set(host='foo').url == 'foo'
-        assert f.set(host='pumps.com').url == 'pumps.com'
-        assert f.set(host='pumps.com', port=88).url == 'pumps.com:88'
-        assert f.set(netloc='pumps.com:88').url == 'pumps.com:88'
+        assert f.set(host='foo').url == '//foo'
+        assert f.set(host='pumps.com').url == '//pumps.com'
+        assert f.set(host='pumps.com', port=88).url == '//pumps.com:88'
+        assert f.set(netloc='pumps.com:88').url == '//pumps.com:88'
+
+        # furl('...') and furl.url = '...' are functionally identical.
+        url = 'https://www.pumps.com/path?query#frag'
+        f1 = furl.furl(url)
+        f2 = furl.furl()
+        f2.url = url
+        assert f1 == f2
+
+        # Empty scheme and netloc.
+        f = furl.furl('://')
+        assert f.scheme == f.netloc == '' and f.url == '://'
 
     def test_basic_manipulation(self):
         f = furl.furl('http://www.pumps.com/')
@@ -1420,6 +1543,31 @@ class TestFurl(unittest.TestCase):
         f.host = 'ohay.com'
         assert str(f) == 'sup://ohay.com/hay%20supppp?space=1+2#sup'
 
+    def test_path_itruediv(self):
+        f = furl.furl('http://www.pumps.com/')
+
+        f /= 'a'
+        assert f.url == 'http://www.pumps.com/a'
+
+        f /= 'b'
+        assert f.url == 'http://www.pumps.com/a/b'
+
+        f /= 'c d/'
+        assert f.url == 'http://www.pumps.com/a/b/c%20d/'
+
+    def test_path_truediv(self):
+        f = furl.furl('http://www.pumps.com/')
+
+        f1 = f / 'a'
+        assert f.url == 'http://www.pumps.com/'
+        assert f1.url == 'http://www.pumps.com/a'
+
+        f2 = f / 'c' / 'd e/'
+        assert f2.url == 'http://www.pumps.com/c/d%20e/'
+
+        f3 = f / furl.Path('f')
+        assert f3.url == 'http://www.pumps.com/f'
+
     def test_odd_urls(self):
         # Empty.
         f = furl.furl('')
@@ -1431,15 +1579,14 @@ class TestFurl(unittest.TestCase):
         assert str(f.fragment) == ''
         assert f.url == ''
 
-        # Keep in mind that ';' is a query delimiter for both the URL
-        # query and the fragment query, resulting in the str(path),
-        # str(query), and str(fragment) values below.
         url = (
             "sup://example.com/:@-._~!$&'()*+,=;:@-._~!$&'()*+,=:@-._~!$&'()*+"
             ",==?/?:@-._~!$'()*+,;=/?:@-._~!$'()*+,;==#/?:@-._~!$&'()*+,;=")
         pathstr = "/:@-._~!$&'()*+,=;:@-._~!$&'()*+,=:@-._~!$&'()*+,=="
-        querystr = "/?:@-._~!$'()*+,=&=/?:@-._~!$'()*+,&=="
-        fragmentstr = "/?:@-._~!$=&'()*+,=&="
+        querystr = (
+            quote_plus("/?:@-._~!$'()* ,;") + '=' +
+            quote_plus("/?:@-._~!$'()* ,;=="))
+        fragmentstr = quote_plus("/?:@-._~!$&'()* ,;=", '/?&=')
         f = furl.furl(url)
         assert f.scheme == 'sup'
         assert f.host == 'example.com'
@@ -1452,36 +1599,47 @@ class TestFurl(unittest.TestCase):
         # Scheme only.
         f = furl.furl('sup://')
         assert f.scheme == 'sup'
-        assert f.host is f.port is f.netloc is None
-        assert str(f.path) == ''
-        assert str(f.query) == ''
+        assert f.host == f.netloc == ''
+        assert f.port is None
+        assert str(f.path) == str(f.query) == str(f.fragment) == ''
         assert f.args == f.query.params == {}
-        assert str(f.fragment) == ''
-        assert f.url == 'sup://' and f.netloc is None
+        assert f.url == 'sup://'
         f.scheme = None
-        assert f.scheme is None and f.netloc is None and f.url == ''
+        assert f.scheme is None and f.netloc == '' and f.url == '//'
         f.scheme = ''
-        assert f.scheme == '' and f.netloc is None and f.url == '//'
+        assert f.scheme == '' and f.netloc == '' and f.url == '://'
+
+        f = furl.furl('sup:')
+        assert f.scheme == 'sup'
+        assert f.host is f.port is f.netloc is None
+        assert str(f.path) == str(f.query) == str(f.fragment) == ''
+        assert f.args == f.query.params == {}
+        assert f.url == 'sup:'
+        f.scheme = None
+        assert f.url == '' and f.netloc is None
+        f.scheme = ''
+        assert f.url == ':' and f.netloc is None
 
         # Host only.
         f = furl.furl().set(host='pumps.meat')
-        assert f.url == 'pumps.meat' and f.netloc == f.host == 'pumps.meat'
+        assert f.url == '//pumps.meat' and f.netloc == f.host == 'pumps.meat'
         f.host = None
         assert f.url == '' and f.host is f.netloc is None
         f.host = ''
-        assert f.url == '' and f.host == f.netloc == ''
+        assert f.url == '//' and f.host == f.netloc == ''
 
         # Port only.
         f = furl.furl()
         f.port = 99
-        assert f.url == ':99' and f.netloc is not None
+        assert f.url == '//:99' and f.netloc is not None
         f.port = None
         assert f.url == '' and f.netloc is None
 
         # urlparse.urlsplit() treats the first two '//' as the beginning
         # of a netloc, even if the netloc is empty.
         f = furl.furl('////path')
-        assert f.url == '//path' and str(f.path) == '//path'
+        assert f.netloc == '' and str(f.path) == '//path'
+        assert f.url == '////path'
 
         # TODO(grun): Test more odd URLs.
 
@@ -1489,7 +1647,7 @@ class TestFurl(unittest.TestCase):
         # No host.
         url = 'http:///index.html'
         f = furl.furl(url)
-        assert f.host is None and furl.furl(url).url == url
+        assert f.host == '' and furl.furl(url).url == url
 
         # Valid IPv4 and IPv6 addresses.
         f = furl.furl('http://192.168.1.101')
@@ -1513,15 +1671,12 @@ class TestFurl(unittest.TestCase):
         # exception on invalid IPv6 addresses.
         furl.furl('http://[0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:9999999999999]/')
 
-        # Malformed IPv6 should raise an exception because
-        # urlparse.urlsplit() raises an exception in Python v2.7+. In
-        # Python <= 2.6, urlsplit() doesn't raise a ValueError on
-        # malformed IPv6 addresses.
-        if PYTHON_27PLUS:
-            with self.assertRaises(ValueError):
-                furl.furl('http://[0:0:0:0:0:0:0:1/')
-            with self.assertRaises(ValueError):
-                furl.furl('http://0:0:0:0:0:0:0:1]/')
+        # Malformed IPv6 should raise an exception because urlparse.urlsplit()
+        # raises an exception on malformed IPv6 addresses.
+        with self.assertRaises(ValueError):
+            furl.furl('http://[0:0:0:0:0:0:0:1/')
+        with self.assertRaises(ValueError):
+            furl.furl('http://0:0:0:0:0:0:0:1]/')
 
         # Invalid host strings should raise ValueError.
         invalid_hosts = ['.', '..', 'a..b', '.a.b', '.a.b.', '$', 'a$b']
@@ -1547,12 +1702,11 @@ class TestFurl(unittest.TestCase):
         assert f.port == 888
 
         # Malformed IPv6 should raise an exception because
-        # urlparse.urlsplit() raises an exception in Python v2.7+.
-        if PYTHON_27PLUS:
-            with self.assertRaises(ValueError):
-                f.netloc = '[0:0:0:0:0:0:0:1'
-            with self.assertRaises(ValueError):
-                f.netloc = '0:0:0:0:0:0:0:1]'
+        # urlparse.urlsplit() raises an exception
+        with self.assertRaises(ValueError):
+            f.netloc = '[0:0:0:0:0:0:0:1'
+        with self.assertRaises(ValueError):
+            f.netloc = '0:0:0:0:0:0:0:1]'
 
         # Invalid ports should raise an exception.
         with self.assertRaises(ValueError):
@@ -1563,6 +1717,10 @@ class TestFurl(unittest.TestCase):
         # No side effects.
         assert f.host == '[0:0:0:0:0:0:0:1:1:1:1:1:1:1:1:9999999999999]'
         assert f.port == 888
+
+        # Empty netloc.
+        f = furl.furl('//')
+        assert f.scheme is None and f.netloc == '' and f.url == '//'
 
     def test_origin(self):
         assert furl.furl().origin == '://'
@@ -1580,13 +1738,12 @@ class TestFurl(unittest.TestCase):
         f.origin = 'ssh://horse-machine.de'
         assert f.url == 'ssh://user:pass@horse-machine.de'
 
-        # Malformed IPv6 should raise an exception because
-        # urlparse.urlsplit() raises an exception in Python v2.7+.
-        if PYTHON_27PLUS:
-            with self.assertRaises(ValueError):
-                f.origin = '[0:0:0:0:0:0:0:1'
-            with self.assertRaises(ValueError):
-                f.origin = 'http://0:0:0:0:0:0:0:1]'
+        # Malformed IPv6 should raise an exception because urlparse.urlsplit()
+        # raises an exception.
+        with self.assertRaises(ValueError):
+            f.origin = '[0:0:0:0:0:0:0:1'
+        with self.assertRaises(ValueError):
+            f.origin = 'http://0:0:0:0:0:0:0:1]'
 
         # Invalid ports should raise an exception.
         with self.assertRaises(ValueError):
@@ -1642,7 +1799,7 @@ class TestFurl(unittest.TestCase):
         assert furl.furl('unknown://pump.com:99').set(scheme='http').port == 99
         assert furl.furl('http://pump.com:99').set(scheme='unknown').port == 99
 
-        # Domains are always lowercase.
+        # Hostnames are always lowercase.
         f = furl.furl('http://wWw.PuMpS.com:9999')
         assert f.netloc == 'www.pumps.com:9999'
         f.netloc = 'yEp.NoPe:9999'
@@ -1810,6 +1967,14 @@ class TestFurl(unittest.TestCase):
                              username=True, password=True, port=True)
         assert f.url == 'http://host/a/big/?s=s+s'
 
+        # scheme, host, port, netloc, origin.
+        f = furl.furl('https://host:999/path')
+        assert f.copy().remove(scheme=True).url == '//host:999/path'
+        assert f.copy().remove(host=True).url == 'https://:999/path'
+        assert f.copy().remove(port=True).url == 'https://host/path'
+        assert f.copy().remove(netloc=True).url == 'https:///path'
+        assert f.copy().remove(origin=True).url == '/path'
+
         # No errors are thrown when removing URL components that don't exist.
         f = furl.furl(url)
         assert f is f.remove(fragment_path=['asdf'], fragment_args=['asdf'],
@@ -1890,15 +2055,41 @@ class TestFurl(unittest.TestCase):
                '#uwantpump?')
         assert f.url == 'http://pepp.ru/a/b/c#uwantpump?'
 
+        # In edge cases (e.g. URLs without an authority/netloc), behave
+        # identically to urllib.parse.urljoin(), which changed behavior in
+        # Python 3.9.
+        f = furl.furl('wss://slrp.com/').join('foo:1')
+        if sys.version_info[:2] < (3, 9):
+            assert f.url == 'wss://slrp.com/foo:1'
+        else:
+            assert f.url == 'foo:1'
+        f = furl.furl('wss://slrp.com/').join('foo:1:rip')
+        assert f.url == 'foo:1:rip'
+        f = furl.furl('scheme:path').join('foo:blah')
+        assert f.url == 'foo:blah'
+
     def test_tostr(self):
-        f = furl.furl('http://blast.off/?a+b=c+d&two%20tap=cat%20nap%24')
+        f = furl.furl('http://blast.off/?a+b=c+d&two%20tap=cat%20nap%24%21')
         assert f.tostr() == f.url
         assert (f.tostr(query_delimiter=';') ==
-                'http://blast.off/?a+b=c+d;two+tap=cat+nap$')
+                'http://blast.off/?a+b=c+d;two+tap=cat+nap%24%21')
         assert (f.tostr(query_quote_plus=False) ==
-                'http://blast.off/?a%20b=c%20d&two%20tap=cat%20nap$')
+                'http://blast.off/?a%20b=c%20d&two%20tap=cat%20nap%24%21')
         assert (f.tostr(query_delimiter=';', query_quote_plus=False) ==
-                'http://blast.off/?a%20b=c%20d;two%20tap=cat%20nap$')
+                'http://blast.off/?a%20b=c%20d;two%20tap=cat%20nap%24%21')
+        assert (f.tostr(query_quote_plus=False, query_dont_quote=True) ==
+                'http://blast.off/?a%20b=c%20d&two%20tap=cat%20nap$!')
+        # query_dont_quote ignores invalid query characters, like '$'.
+        assert (f.tostr(query_quote_plus=False, query_dont_quote='$') ==
+                'http://blast.off/?a%20b=c%20d&two%20tap=cat%20nap$%21')
+
+        url = 'https://klugg.com/?hi=*'
+        url_encoded = 'https://klugg.com/?hi=%2A&url='
+        f = furl.furl(url).set(args=[('hi', '*'), ('url', url)])
+        assert f.tostr() == url_encoded + quote_plus(url)
+        assert f.tostr(query_dont_quote=True) == url + '&url=' + url
+        assert f.tostr(query_dont_quote='*') == (
+            url + '&url=' + quote_plus(url, '*'))
 
     def test_equality(self):
         assert furl.furl() is not furl.furl() and furl.furl() == furl.furl()
@@ -2155,10 +2346,8 @@ class TestFurl(unittest.TestCase):
             assert not furl.is_valid_encoded_query_value(invalid)
 
     def test_asdict(self):
-        segments = ['wiki', 'ロリポップ']
         path_encoded = '/wiki/%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
 
-        pairs = [('a', '1'), ('ロリポップ', 'testä')]
         key_encoded = '%E3%83%AD%E3%83%AA%E3%83%9D%E3%83%83%E3%83%97'
         value_encoded = 'test%C3%A4'
         query_encoded = 'a=1&' + key_encoded + '=' + value_encoded
@@ -2189,3 +2378,17 @@ class TestFurl(unittest.TestCase):
             'fragment': f.asdict(),
             }
         assert u.asdict() == d
+
+
+class TestMeta(unittest.TestCase):
+    def test_metadata_varibles(self):
+        def is_non_empty_string(s):
+            return isinstance(s, string_types) and s
+
+        assert is_non_empty_string(furl.__title__)
+        assert is_non_empty_string(furl.__version__)
+        assert is_non_empty_string(furl.__license__)
+        assert is_non_empty_string(furl.__author__)
+        assert is_non_empty_string(furl.__contact__)
+        assert is_non_empty_string(furl.__url__)
+        assert is_non_empty_string(furl.__description__)

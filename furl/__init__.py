@@ -3,18 +3,14 @@
 #
 # furl - URL manipulation made simple.
 #
-# Arthur Grunseid
+# Ansgar Grunseid
 # grunseid.com
 # grunseid@gmail.com
 #
 # License: Build Amazing Things (Unlicense)
 #
 
-from .furl import *
-
-__title__ = 'furl'
-__version__ = '1.0.0'
-__license__ = 'Unlicense'
-__author__ = 'Arthur Grunseid'
-__contact__ = 'grunseid@gmail.com'
-__url__ = 'https://github.com/gruns/furl'
+from .furl import *  # noqa
+from .__version__ import (  # noqa
+    __title__, __version__, __license__, __author__, __contact__, __url__,
+    __description__)

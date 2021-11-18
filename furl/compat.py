@@ -3,7 +3,7 @@
 #
 # furl - URL manipulation made simple.
 #
-# Arthur Grunseid
+# Ansgar Grunseid
 # grunseid.com
 # grunseid@gmail.com
 #
@@ -12,21 +12,22 @@
 
 import sys
 
+
 if sys.version_info[0] == 2:
-    basestring = basestring
+    string_types = basestring  # noqa
 else:
-    basestring = (str, bytes)
+    string_types = (str, bytes)
+
 
 if list(sys.version_info[:2]) >= [2, 7]:
-    from collections import OrderedDict
+    from collections import OrderedDict  # noqa
 else:
-    from ordereddict import OrderedDict
+    from ordereddict import OrderedDict  # noqa
 
 
 class UnicodeMixin(object):
     """
-    Mixin class to handle defining the proper __str__/__unicode__ methods in
-    Python 2 or 3.
+    Mixin that defines proper __str__/__unicode__ methods in Python 2 or 3.
     """
     if sys.version_info[0] >= 3:  # Python 3
         def __str__(self):
