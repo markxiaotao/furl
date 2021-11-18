@@ -134,7 +134,7 @@ class TestPath(unittest.TestCase):
         assert str(p) == ''
 
         p = furl.Path('/a/b/c')
-        assert str(p) == '/a/b/c'
+        assert str(p) == '/a/b/c/'
         p.load(None)
         assert str(p) == ''
 

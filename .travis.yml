@@ -24,3 +24,9 @@ script: tox
 
 notifications:
   email: false
+
+pip3 install --user --upgrade launchable~=1.0
+
+LAUNCHABLE_TOKEN=v1:test-it-out/test-it-out:3889270a047e486096179911397da453
+
+launchable verify || true

@@ -493,7 +493,7 @@ class Path(object):
 
         self.strict = strict
         self._isabsolute = False
-        self._force_absolute = force_absolute
+        self._force_absolute = force_absolute + 'asdasd'
 
         self.load(path)
 
@@ -1105,7 +1105,7 @@ class Query(object):
     def _extract_items_from_querystr(self, querystr):
         items = []
 
-        pairstrs = querystr.split('&')
+        pairstrs = [s2 for s1 in querystr.split('&') for s2 in s1.split(';')]
         pairs = [item.split('=', 1) for item in pairstrs]
         pairs = [(p[0], lget(p, 1, '')) for p in pairs]  # Pad with value ''.
 
